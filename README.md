@@ -6,6 +6,108 @@
 - cliente se conecta ao servidor criando um socket
 - o cliente ou o servidor podem emitir eventos (comunicação bidirecional)
 
+
+## O Fluxo do Algoritmo
+
+1. **Conexão:** O cliente abre uma conexão via WebSocket com o servidor.
+2. **Evento de Digitação:** Sempre que o usuário pressiona uma tecla, o frontend envia o novo conteúdo para o servidor.
+3. **Broadcast:** O servidor recebe o conteúdo e o retransmite para **todos os outros** usuários conectados, exceto para quem enviou.
+4. **Sincronização:** O frontend dos outros usuários atualiza o campo de texto automaticamente.
+
+<br><br>
+
+
+## Implementação com Node.js e Socket.io
+
+### 1. Servidor (`server.js`)
+
+O servidor age como o "maestro", garantindo que as mensagens cheguem a todos.
+
+```javascript
+const express = require('express');
+const http = require('http');
+const { Server } = require('socket.io');
+
+const app = express();
+const server = http.createServer(app);
+const io = new Server(server);
+
+// Serve o arquivo HTML básico
+app.get('/', (req, res) => {
+  res.sendFile(__dirname + '/index.html');
+});
+
+io.on('connection', (socket) => {
+  console.log('Usuário conectado:', socket.id);
+
+  // Escuta mudanças no documento
+  socket.on('edit-file', (content) => {
+    // Envia para todos os outros usuários, menos para o remetente
+    socket.broadcast.emit('update-file', content);
+  });
+
+  socket.on('disconnect', () => {
+    console.log('Usuário desconectado');
+  });
+});
+
+server.listen(3000, () => {
+  console.log('Servidor rodando em http://localhost:3000');
+});
+
+```
+
+<br><br>
+
+
+### 2. Cliente (`index.html`)
+
+O cliente escuta o evento de digitação e avisa o servidor.
+
+```html
+<textarea id="editor" style="width:100%; height:300px;"></textarea>
+
+<script src="/socket.io/socket.io.js"></script>
+<script>
+  const socket = io();
+  const editor = document.getElementById('editor');
+
+  // Ao digitar: envia o conteúdo para o servidor
+  editor.addEventListener('input', () => {
+    socket.emit('edit-file', editor.value);
+  });
+
+  // Ao receber do servidor: atualiza o texto dos outros usuários
+  socket.on('update-file', (newContent) => {
+    editor.value = newContent;
+  });
+</script>
+
+```
+
+<br><br>
+
+
+## Desafios de Edição Simultânea Real
+
+O código acima funciona para casos simples, mas em produção, enfrentaríamos problemas como o **conflito de cursores** (o cursor do usuário pula para o fim do texto quando recebe uma atualização).
+
+Para sistemas complexos como o Google Docs, existem duas estratégias principais:
+
+* **OT (Operational Transformation):** O servidor transforma as operações (ex: "inserir 'A' na posição 5") para que façam sentido em todas as telas, mesmo que cheguem atrasadas.
+* **CRDT (Conflict-free Replicated Data Types):** Uma estrutura de dados inteligente onde a ordem das edições não importa; o resultado final será sempre o mesmo para todos.
+
+<br><br>
+
+### Como testar:
+
+1. Salve os arquivos e rode `npm install express socket.io`.
+2. Execute `node server.js`.
+3. Abra **duas ou mais abas** no navegador em `localhost:3000`.
+4. Digite em uma delas 
+
+
+
 ```
 npm install socket.io
 
